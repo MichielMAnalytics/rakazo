@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { createApp } from "@rakazo/api/app";
 import { loadRootEnv } from "@rakazo/core/node/load-root-env";
+import { runAsSystem } from "@rakazo/db";
 import { createModelConnectionFixtureFetch } from "../model-connection-fixture.js";
 import { PluginMarketplaceFixture } from "../plugin-marketplace-fixture.js";
 import { startPostgres } from "./postgres.js";
@@ -27,8 +28,8 @@ const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
 }
-if (!["fake", "e2b", "novita", "daytona", "boat"].includes(sandboxProvider)) {
-  throw new Error('Sandbox must be "fake", "e2b", "novita", "daytona", or "boat"');
+if (!["fake", "e2b", "novita", "daytona", "boat", "boxd"].includes(sandboxProvider)) {
+  throw new Error('Sandbox must be "fake", "e2b", "novita", "daytona", "boat", or "boxd"');
 }
 if (integration && sandboxProvider !== "fake") {
   throw new Error("Integration tests only support the fake sandbox");
@@ -47,6 +48,9 @@ if (sandboxProvider === "daytona" && !process.env.DAYTONA_API_KEY) {
 }
 if (sandboxProvider === "boat" && !process.env.BOAT_API_KEY) {
   throw new Error("BOAT_API_KEY is required when --sandbox=boat");
+}
+if (sandboxProvider === "boxd" && !process.env.BOXD_API_KEY) {
+  throw new Error("BOXD_API_KEY is required when --sandbox=boxd");
 }
 
 async function main() {
@@ -328,7 +332,7 @@ async function main() {
               {
                 id: computer.providerRef!,
                 botId: computer.homeKey,
-                kind: computer.kind as "e2b" | "novita" | "daytona" | "boat",
+                kind: computer.kind as "e2b" | "novita" | "daytona" | "boat" | "boxd",
                 providerRef: computer.providerRef!,
               },
               {
@@ -360,11 +364,14 @@ async function main() {
 type AppHandles = Awaited<ReturnType<typeof createApp>>;
 
 async function managedComputers(handles: AppHandles) {
-  if (!["e2b", "novita", "daytona", "boat"].includes(sandboxProvider)) return [];
-  return handles.prisma.computer.findMany({
-    where: { providerRef: { not: null } },
-    select: { homeKey: true, kind: true, providerRef: true, userId: true, spaceId: true },
-  });
+  if (!["e2b", "novita", "daytona", "boat", "boxd"].includes(sandboxProvider)) return [];
+  // Outside a tenant or system context the runtime login reads no rows, and nothing is destroyed.
+  return runAsSystem("e2e cleanup of real test sandboxes", () =>
+    handles.prisma.computer.findMany({
+      where: { providerRef: { not: null } },
+      select: { homeKey: true, kind: true, providerRef: true, userId: true, spaceId: true },
+    }),
+  );
 }
 
 async function writeSummary(reportDir: string, summary: Record<string, unknown>) {
