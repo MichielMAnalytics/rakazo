@@ -7,10 +7,8 @@ import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import {
   AgentImportCreateInput,
-  AgentImportInfoSchema,
   AgentImportPlanSchema,
   AgentImportPreviewInput,
-  AgentImportUndoInput,
 } from "./agent-import.js";
 import { AgentImportSetupStateInput, AgentImportSetupStateSchema } from "./agent-import-setup.js";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
@@ -108,6 +106,9 @@ import {
   PluginMarketplaceCatalogSchema,
   PluginPartSchema,
   PluginPreviewSchema,
+  PluginSubmissionReviewSchema,
+  PluginSubmissionSchema,
+  PluginSubmissionStatusSchema,
   REPLY_QUOTE_MAX_LENGTH,
   ReorderBotsInput,
   ROUTINE_MENTION_BATCH_MAX,
@@ -428,9 +429,7 @@ export const appContract = {
     create: oc.input(CreateBotInput).output(BotSchema),
     importPreview: oc.input(AgentImportPreviewInput).output(AgentImportPlanSchema),
     importCreate: oc.input(AgentImportCreateInput).output(BotSchema),
-    importInfo: oc.input(botId).output(AgentImportInfoSchema.nullable()),
     importSetupState: oc.input(AgentImportSetupStateInput).output(AgentImportSetupStateSchema),
-    importUndo: oc.input(AgentImportUndoInput).output(AgentImportInfoSchema),
     duplicate: oc.input(botId).output(BotSchema),
     reorder: oc.input(ReorderBotsInput).output(z.object({ ok: z.literal(true) })),
     update: oc.input(UpdateBotInput).output(BotSchema),
@@ -593,9 +592,18 @@ export const appContract = {
             fields: z.array(LoginFieldInput).min(1).max(LOGIN_FIELD_LIMIT).optional(),
             /** A login card's answer from apps that predate `fields`; `answer` carries its password. */
             username: z.string().min(1).max(512).optional(),
+            /** Only for a login card: use the login for this run only instead of saving it. */
+            remember: z.literal(false).optional(),
             /** Turns down a pending secret request; `answer` is then empty. */
             dismiss: z.literal(true).optional(),
           })
+          .refine(
+            (input) => input.remember === undefined || Boolean(input.fields ?? input.username),
+            {
+              message: "Only a website login can be used without saving it",
+              path: ["remember"],
+            },
+          )
           .refine(
             (input) =>
               input.dismiss
@@ -884,6 +892,12 @@ export const appContract = {
     catalog: oc
       .input(z.object({ query: z.string().trim().max(200).default("") }))
       .output(PluginMarketplaceCatalogSchema),
+    /** Admins only. */
+    submissions: oc
+      .input(z.object({ status: PluginSubmissionStatusSchema.default("pending") }))
+      .output(z.array(PluginSubmissionSchema)),
+    /** Admins only. */
+    review: oc.input(PluginSubmissionReviewSchema).output(PluginSubmissionSchema),
   },
   capabilities: {
     list: oc.output(z.array(CapabilityInstallSchema)),

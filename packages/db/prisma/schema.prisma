@@ -278,6 +278,30 @@ model Referral {
   @@map("referrals")
 }
 
+model PluginSubmission {
+  id           String    @id @default(cuid())
+  email        String
+  name         String
+  website      String?
+  logo         String
+  source       String
+  description  String
+  testing      String
+  status       String    @default("pending")
+  reason       String?
+  // Set on approval.
+  pinnedSource String?
+  hasConnector Boolean   @default(false)
+  skillCount   Int       @default(0)
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([source])
+  @@map("plugin_submissions")
+}
+
 model ActionApprovalRule {
   id              String   @id @default(cuid())
   spaceId         String
@@ -759,7 +783,6 @@ model Message {
 
   @@unique([threadId, seq])
   @@unique([threadId, clientNonce])
-  @@index([threadId, seq])
   @@index([replyToMessageId])
   @@index([runId, seq])
   @@index([searchTokens], type: Gin)
@@ -781,7 +804,6 @@ model Event {
 
   @@unique([threadId, seq])
   @@index([spaceId, createdAt])
-  @@index([threadId, seq])
   @@index([runId, type, seq])
   @@map("events")
 }
@@ -856,7 +878,6 @@ model Run {
   @@index([status, wakeAt])
   @@index([status, leaseExpiresAt])
   @@index([status, updatedAt, id])
-  @@index([botOutcomeReturnedAt, status])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
   @@index([spaceId, botId])
@@ -865,6 +886,7 @@ model Run {
   @@index([sourceMessageId])
   @@index([threadId, status, createdAt])
   // Partial index runs_recent_activity_idx (recent foreground activity) is created in SQL.
+  // Partial index runs_bot_outcome_pending_idx (unreturned bot-message outcomes) is created in SQL.
   @@index([routineId])
   @@map("runs")
 }
@@ -1103,7 +1125,7 @@ model TaughtSkill {
   @@map("taught_skills")
 }
 
-/// What an agent import created, so Undo can remove it.
+/// An agent import, read by its setup checklist and by a retried create.
 model AgentImport {
   id            String   @id @default(cuid())
   spaceId       String
