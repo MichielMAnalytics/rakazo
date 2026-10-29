@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { createApp } from "@rakazo/api/app";
 import { loadRootEnv } from "@rakazo/core/node/load-root-env";
-import { runAsSystem } from "@rakazo/db";
+import type { runAsSystem as RunAsSystem } from "@rakazo/db";
 import { createModelConnectionFixtureFetch } from "../model-connection-fixture.js";
 import { PluginMarketplaceFixture } from "../plugin-marketplace-fixture.js";
 import { startPostgres } from "./postgres.js";
@@ -202,7 +202,7 @@ async function main() {
         UserDeviceEmulator,
       },
       { createApp },
-      { drainUnscopedDatabaseAccess },
+      { drainUnscopedDatabaseAccess, runAsSystem },
     ] = await Promise.all([
       import("@rakazo/adapters"),
       import("@rakazo/api/app"),
@@ -316,7 +316,7 @@ async function main() {
       });
     } finally {
       const cleanupErrors: unknown[] = [];
-      const computers = await managedComputers(handles).catch((error) => {
+      const computers = await managedComputers(handles, runAsSystem).catch((error) => {
         cleanupErrors.push(error);
         return [];
       });
@@ -363,7 +363,7 @@ async function main() {
 
 type AppHandles = Awaited<ReturnType<typeof createApp>>;
 
-async function managedComputers(handles: AppHandles) {
+async function managedComputers(handles: AppHandles, runAsSystem: typeof RunAsSystem) {
   if (!["e2b", "novita", "daytona", "boat", "boxd"].includes(sandboxProvider)) return [];
   // Outside a tenant or system context the runtime login reads no rows, and nothing is destroyed.
   return runAsSystem("e2e cleanup of real test sandboxes", () =>
